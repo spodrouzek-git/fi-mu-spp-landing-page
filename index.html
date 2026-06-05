@@ -666,6 +666,11 @@
       font-weight: 850;
     }
 
+    .form-status.error-state {
+      background: #fff0ee;
+      color: var(--danger);
+    }
+
     .form-status.visible {
       display: block;
     }
@@ -1097,7 +1102,7 @@
               <textarea id="note" name="note" placeholder="Doplňte preferovanou akci, rozsah zapojení nebo dotazy."></textarea>
             </div>
 
-            <div class="form-status" id="formStatus" role="status" aria-live="polite">Děkujeme za váš zájem. Budeme vás kontaktovat.</div>
+            <div class="form-status" id="formStatus" role="status" aria-live="polite"></div>
             <button class="button" type="submit">Odeslat zájem</button>
           </div>
         </form>
@@ -1169,6 +1174,10 @@
 
     const form = document.getElementById("interestForm");
     const status = document.getElementById("formStatus");
+    const submitButton = form.querySelector('button[type="submit"]');
+
+    // Paste the deployed Google Apps Script web app URL here.
+    const GOOGLE_APPS_SCRIPT_URL = "";
 
     const setError = (id, message) => {
       document.getElementById(id).textContent = message;
@@ -1176,14 +1185,26 @@
 
     const hasChecked = (name) => Boolean(form.querySelector(`input[name="${name}"]:checked`));
 
-    form.addEventListener("submit", (event) => {
+    const getCheckedValues = (name) => {
+      return [...form.querySelectorAll(`input[name="${name}"]:checked`)].map((input) => input.value);
+    };
+
+    const setStatus = (message, isError = false) => {
+      status.textContent = message;
+      status.classList.toggle("error-state", isError);
+      status.classList.add("visible");
+    };
+
+    form.addEventListener("submit", async (event) => {
       event.preventDefault();
       status.classList.remove("visible");
+      status.classList.remove("error-state");
 
       const company = form.company.value.trim();
       const person = form.person.value.trim();
       const email = form.email.value.trim();
       const phone = form.phone.value.trim();
+      const note = form.note.value.trim();
       const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
       const phonePattern = /^[+\d][\d\s().-]{6,}$/;
       let valid = true;
@@ -1231,9 +1252,45 @@
         return;
       }
 
-      form.reset();
-      status.classList.add("visible");
-      status.focus?.();
+      if (!GOOGLE_APPS_SCRIPT_URL) {
+        setStatus("Formulář je připravený, ale chybí URL Google Apps Scriptu pro zápis do tabulky.", true);
+        return;
+      }
+
+      const payload = {
+        submittedAt: new Date().toISOString(),
+        company,
+        person,
+        email,
+        phone,
+        events: getCheckedValues("events"),
+        engagement: getCheckedValues("engagement"),
+        note,
+        pageUrl: window.location.href
+      };
+
+      submitButton.disabled = true;
+      submitButton.textContent = "Odesílám...";
+
+      try {
+        await fetch(GOOGLE_APPS_SCRIPT_URL, {
+          method: "POST",
+          mode: "no-cors",
+          headers: {
+            "Content-Type": "text/plain;charset=utf-8"
+          },
+          body: JSON.stringify(payload)
+        });
+
+        form.reset();
+        setStatus("Děkujeme za váš zájem. Budeme vás kontaktovat.");
+      } catch (error) {
+        setStatus("Odeslání se nepodařilo. Zkuste to prosím znovu nebo nás kontaktujte e-mailem.", true);
+      } finally {
+        submitButton.disabled = false;
+        submitButton.textContent = "Odeslat zájem";
+        status.focus?.();
+      }
     });
   </script>
 </body>
